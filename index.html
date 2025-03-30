@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backpack Exchange 价格监控</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            background-color: #e8f4fd;
+        }
+        .price-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .price-table th, .price-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .price-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .price-table tr:hover {
+            background-color: #f9f9f9;
+        }
+        .positive {
+            color: #28a745;
+        }
+        .negative {
+            color: #dc3545;
+        }
+        .alert {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border-left: 5px solid #ffc107;
+            display: none;
+        }
+        .config-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .config-section h3 {
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0069d9;
+        }
+        #coinList {
+            width: 100%;
+            height: 100px;
+        }
+        #log {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Backpack Exchange 价格监控</h1>
+        
+        <div class="status" id="statusBar">
+            <p>状态: 未连接</p>
+            <p>更新时间: --</p>
+        </div>
+        
+        <div class="alert" id="priceAlert">
+            <h3>价差提醒</h3>
+            <p id="alertTime"></p>
+            <p id="alertCoin"></p>
+            <p id="alertSpotPrice"></p>
+            <p id="alertPerpPrice"></p>
+            <p id="alertDifference"></p>
+            <p id="alertMessage"></p>
+        </div>
+        
+        <table class="price-table" id="priceTable">
+            <thead>
+                <tr>
+                    <th>币种</th>
+                    <th>现货价格</th>
+                    <th>永续合约价格</th>
+                    <th>价差(绝对值)</th>
+                    <th>价差(百分比)</th>
+                </tr>
+            </thead>
+            <tbody id="priceTableBody">
+                <!-- 价格数据将通过JavaScript动态添加 -->
+            </tbody>
+        </table>
+        
+        <div class="config-section">
+            <h3>配置设置</h3>
+            <div class="form-group">
+                <label for="apiKey">API Key:</label>
+                <input type="text" id="apiKey" placeholder="输入您的API Key">
+            </div>
+            <div class="form-group">
+                <label for="apiSecret">API Secret:</label>
+                <input type="text" id="apiSecret" placeholder="输入您的API Secret">
+            </div>
+            <div class="form-group">
+                <label for="coinList">监控币种 (每行一个):</label>
+                <textarea id="coinList">BTC
+ETH
+SOL
+LINK
+JUP</textarea>
+            </div>
+            <div class="form-group">
+                <label for="threshold">价差阈值 (%):</label>
+                <input type="number" id="threshold" value="0.01" step="0.01" min="0">
+            </div>
+            <div class="form-group">
+                <label for="alertInterval">提醒间隔 (分钟):</label>
+                <input type="number" id="alertInterval" value="15" min="1">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="disableDeduplication"> 禁用防重复提醒
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="showPriceTable" checked> 显示价格表格
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="refreshInterval">刷新间隔 (毫秒):</label>
+                <input type="number" id="refreshInterval" value="5000" min="1000" step="1000">
+            </div>
+            <button id="applyConfig">应用配置</button>
+            <button id="connectBtn">连接</button>
+            <button id="disconnectBtn" disabled>断开连接</button>
+        </div>
+        
+        <div id="log">
+            <div class="log-entry">准备就绪，请配置并连接...</div>
+        </div>
+    </div>
+
+    <script>
+        // 配置对象
+        let config = {
+            apiKey: '',
+            apiSecret: '',
+            coins: ['BTC', 'ETH', 'SOL', 'LINK', 'JUP'],
+            priceAlerts: {
+                thresholdPercentage: 0.01,
+                disableDeduplication: false,
+                alertInterval: 15
+            },
+            display: {
+                refreshInterval: 5000,
+                showPriceTable: true
+            }
+        };
+
+        // 价格存储
+        const prices = {
+            spot: {},
+            perp: {}
+        };
+
+        // 用于记录已经提醒过的币种价差，避免重复提醒
+        const alertedPairs = new Set();
+
+        // WebSocket对象
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        // DOM元素
+        const statusBar = document.getElementById('statusBar');
+        const priceTable = document.getElementById('priceTable');
+        const priceTableBody = document.getElementById('priceTableBody');
+        const priceAlert = document.getElementById('priceAlert');
+        const log = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const applyConfigBtn = document.getElementById('applyConfig');
+
+        // 工具函数
+        function formatPrice(price) {
+            return parseFloat(price).toFixed(2);
+        }
+
+        function formatPremium(premium) {
+            const value = parseFloat(premium).toFixed(4);
+            const sign = value > 0 ? '+' : '';
+            return `${sign}${value}`;
+        }
+
+        function formatPercentage(percentage) {
+            const value = parseFloat(percentage).toFixed(4);
+            const sign = value > 0 ? '+' : '';
+            return `${sign}${value}%`;
+        }
+
+        function addLogEntry(message) {
+            const now = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${now}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // 更新状态栏
+        function updateStatus(message) {
+            const now = new Date().toLocaleTimeString();
+            statusBar.innerHTML = `
+                <p>状态: ${message}</p>
+                <p>更新时间: ${now}</p>
+            `;
+        }
+
+        // 创建签名（客户端不安全，仅作演示）
+        function createSignature(timestamp, method, path, body) {
+            // 注意：在真实应用中，这种签名应该在服务器端完成
+            // 这里只是演示，不能在生产环境使用
+            addLogEntry("警告: 在浏览器中创建签名不安全，仅供演示");
+            return "demo-signature";
+        }
+
+        // 显示价格表格
+        function displayPrices() {
+            if (!config.display.showPriceTable) {
+                priceTable.style.display = 'none';
+                return;
+            } else {
+                priceTable.style.display = 'table';
+            }
+            
+            // 更新状态
+            updateStatus('已连接');
+            
+            // 清空表格
+            priceTableBody.innerHTML = '';
+            
+            // 填充数据
+            for (const coin of config.coins) {
+                const spotSymbol = `${coin}_USDC`;
+                const perpSymbol = `${coin}_USDC_PERP`;
+                
+                const spotPrice = prices.spot[spotSymbol];
+                const perpPrice = prices.perp[perpSymbol];
+                
+                const row = document.createElement('tr');
+                
+                if (spotPrice && perpPrice) {
+                    // 计算价差
+                    const premium = perpPrice - spotPrice;
+                    const percentage = (premium / spotPrice) * 100;
+                    const percentageClass = premium >= 0 ? 'positive' : 'negative';
+                    
+                    row.innerHTML = `
+                        <td>${coin}</td>
+                        <td>${formatPrice(spotPrice)}</td>
+                        <td>${formatPrice(perpPrice)}</td>
+                        <td>${formatPremium(premium)}</td>
+                        <td class="${percentageClass}">${formatPercentage(percentage)}</td>
+                    `;
+                } else {
+                    row.innerHTML = `
+                        <td>${coin}</td>
+                        <td colspan="4">等待数据...</td>
+                    `;
+                }
+                
+                priceTableBody.appendChild(row);
+            }
+        }
+
+        // 检查价差并显示提醒
+        function checkPriceDifference(coin, spotPrice, perpPrice) {
+            // 计算价差
+            const premium = perpPrice - spotPrice;
+            const percentage = (premium / spotPrice) * 100;
+            const absPercentage = Math.abs(percentage);
+            
+            // 阈值检查
+            if (absPercentage >= config.priceAlerts.thresholdPercentage) {
+                const now = new Date().toLocaleTimeString();
+                const alertKey = `${coin}_${Math.floor(percentage * 100)}`;
+                
+                // 如果这个价差没有被提醒过，或者禁用了防重复机制，才显示提醒
+                if (config.priceAlerts.disableDeduplication || !alertedPairs.has(alertKey)) {
+                    // 添加到已提醒集合
+                    alertedPairs.add(alertKey);
+                    
+                    // 设定时间后自动从已提醒集合中移除，允许再次提醒
+                    setTimeout(() => {
+                        alertedPairs.delete(alertKey);
+                    }, config.priceAlerts.alertInterval * 60 * 1000);
+                    
+                    // 显示提醒
+                    const premiumType = percentage > 0 ? '溢价' : '折价';
+                    
+                    // 更新提醒框内容
+                    document.getElementById('alertTime').textContent = `时间: ${now}`;
+                    document.getElementById('alertCoin').textContent = `币种: ${coin}`;
+                    document.getElementById('alertSpotPrice').textContent = `现货价格: ${formatPrice(spotPrice)}`;
+                    document.getElementById('alertPerpPrice').textContent = `合约价格: ${formatPrice(perpPrice)}`;
+                    document.getElementById('alertDifference').textContent = `价差: ${formatPremium(premium)} (${formatPercentage(percentage)})`;
+                    document.getElementById('alertMessage').textContent = `提醒: ${coin} 永续合约${premiumType}超过阈值 ${config.priceAlerts.thresholdPercentage}%`;
+                    
+                    // 显示提醒框
+                    priceAlert.style.display = 'block';
+                    
+                    // 添加到日志
+                    addLogEntry(`价差提醒: ${coin} 永续合约${premiumType}超过阈值 ${config.priceAlerts.thresholdPercentage}%`);
+                    
+                    // 如果支持浏览器通知，发送通知
+                    if (Notification.permission === "granted") {
+                        new Notification("Backpack Exchange 价差提醒", {
+                            body: `${coin} 永续合约${premiumType}超过阈值 ${config.priceAlerts.thresholdPercentage}%`,
+                            icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' height='24' width='24'><text x='0' y='20' fill='black'>💰</text></svg>"
+                        });
+                    }
+                    
+                    // 一段时间后自动隐藏提醒
+                    setTimeout(() => {
+                        priceAlert.style.display = 'none';
+                    }, 10000);
+                    
+                    return true;
+                }
+            } else {
+                // 如果价差低于阈值，从已提醒集合中移除
+                const alertKey = `${coin}_${Math.floor(percentage * 100)}`;
+                alertedPairs.delete(alertKey);
+            }
+            
+            return false;
+        }
+
+        // 连接到WebSocket
+        function connectWebSocket() {
+            // 检查API Key和Secret是否已设置
+            if (!config.apiKey || !config.apiSecret) {
+                addLogEntry("错误: 请先设置API Key和Secret");
+                return;
+            }
+            
+            // 切换按钮状态
+            connectBtn.disabled = true;
+            disconnectBtn.disabled = false;
+            
+            try {
+                // 实际连接代码
+                addLogEntry("正在连接到Backpack Exchange...");
+                updateStatus('正在连接...');
+                
+                // 创建WebSocket连接
+                ws = new WebSocket('wss://ws.backpack.exchange');
+                
+                // 连接打开时
+                ws.onopen = function() {
+                    addLogEntry("WebSocket连接已建立");
+                    reconnectAttempts = 0;
+                    
+                    // 订阅现货和永续合约价格
+                    subscribeToMarkets();
+                };
+                
+                // 收到消息时
+                ws.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        
+                        // 处理ticker数据
+                        if (message.data && message.data.e === 'ticker') {
+                            const symbol = message.data.s;
+                            const price = parseFloat(message.data.c);
+                            
+                            // 根据符号判断是现货还是合约
+                            if (symbol.endsWith('_PERP')) {
+                                prices.perp[symbol] = price;
+                                
+                                // 提取币种名称
+                                const coin = symbol.split('_')[0];
+                                const spotSymbol = `${coin}_USDC`;
+                                const spotPrice = prices.spot[spotSymbol];
+                                
+                                // 如果现货价格也有了，检查价差
+                                if (spotPrice) {
+                                    checkPriceDifference(coin, spotPrice, price);
+                                }
+                            } else {
+                                prices.spot[symbol] = price;
+                                
+                                // 提取币种名称
+                                const coin = symbol.split('_')[0];
+                                const perpSymbol = `${coin}_USDC_PERP`;
+                                const perpPrice = prices.perp[perpSymbol];
+                                
+                                // 如果永续合约价格也有了，检查价差
+                                if (perpPrice) {
+                                    checkPriceDifference(coin, prices.spot[symbol], perpPrice);
+                                }
+                            }
+                            
+                            // 更新显示
+                            if (config.display.showPriceTable) {
+                                displayPrices();
+                            }
+                        }
+                        
+                        // 处理订阅响应
+                        if (message.result === "success") {
+                            addLogEntry(`订阅成功: ${message.id}`);
+                        }
+                        
+                        // 处理错误
+                        if (message.error) {
+                            addLogEntry(`WebSocket错误: ${JSON.stringify(message.error)}`);
+                        }
+                        
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
+                };
+                
+                // 关闭时
+                ws.onclose = function(event) {
+                    updateStatus('已断开连接');
+                    addLogEntry(`WebSocket连接已关闭: 代码=${event.code}, 原因=${event.reason}`);
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    
+                    // 尝试重连
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        addLogEntry(`尝试重连 (${reconnectAttempts}/${maxReconnectAttempts})...`);
+                        setTimeout(connectWebSocket, 5000);
+                    } else {
+                        addLogEntry(`已达到最大重连次数 (${maxReconnectAttempts})`);
+                    }
+                };
+                
+                // 错误时
+                ws.onerror = function(error) {
+                    addLogEntry("WebSocket错误: " + error.message);
+                };
+                
+            } catch (error) {
+                addLogEntry("连接错误: " + error.message);
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        // 订阅行情
+        function subscribeToMarkets() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addLogEntry("错误: WebSocket未连接");
+                return;
+            }
+            
+            // 生成现货和永续合约符号
+            const spotSymbols = config.coins.map(coin => `${coin}_USDC`);
+            const perpSymbols = config.coins.map(coin => `${coin}_USDC_PERP`);
+            
+            // 订阅现货
+            const spotChannels = spotSymbols.map(symbol => `ticker.${symbol}`);
+            const spotSubscribeParams = {
+                method: 'SUBSCRIBE',
+                params: spotChannels,
+                id: 1
+            };
+            
+            // 订阅永续合约
+            const perpChannels = perpSymbols.map(symbol => `ticker.${symbol}`);
+            const perpSubscribeParams = {
+                method: 'SUBSCRIBE',
+                params: perpChannels,
+                id: 2
+            };
+            
+            // 发送订阅请求
+            ws.send(JSON.stringify(spotSubscribeParams));
+            addLogEntry(`订阅现货: ${spotSymbols.join(', ')}`);
+            
+            ws.send(JSON.stringify(perpSubscribeParams));
+            addLogEntry(`订阅永续合约: ${perpSymbols.join(', ')}`);
+            
+            // 显示初始界面
+            if (config.display.showPriceTable) {
+                displayPrices();
+            } else {
+                priceTable.style.display = 'none';
+                addLogEntry("价格监控已启动，将在价差超过阈值时显示提醒");
+                addLogEntry(`当前监控的币种: ${config.coins.join(', ')}`);
+                addLogEntry(`价差阈值: ${config.priceAlerts.thresholdPercentage}%`);
+            }
+            
+            // 定期刷新显示（即使没有新数据）
+            setInterval(() => {
+                if (config.display.showPriceTable && ws.readyState === WebSocket.OPEN) {
+                    displayPrices();
+                }
+            }, config.display.refreshInterval);
+        }
+
+        // 断开连接
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                addLogEntry("已主动断开WebSocket连接");
+            }
+            
+            // 重置状态
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        }
+
+        // 应用配置
+        function applyConfig() {
+            // 读取表单值
+            config.apiKey = document.getElementById('apiKey').value;
+            config.apiSecret = document.getElementById('apiSecret').value;
+            config.coins = document.getElementById('coinList').value.split('\n').map(c => c.trim()).filter(c => c);
+            
+            config.priceAlerts.thresholdPercentage = parseFloat(document.getElementById('threshold').value);
+            config.priceAlerts.alertInterval = parseInt(document.getElementById('alertInterval').value);
+            config.priceAlerts.disableDeduplication = document.getElementById('disableDeduplication').checked;
+            
+            config.display.showPriceTable = document.getElementById('showPriceTable').checked;
+            config.display.refreshInterval = parseInt(document.getElementById('refreshInterval').value);
+            
+            // 清空之前的集合
+            alertedPairs.clear();
+            
+            addLogEntry("已应用新配置");
+            addLogEntry(`监控币种: ${config.coins.join(', ')}`);
+            addLogEntry(`价差阈值: ${config.priceAlerts.thresholdPercentage}%`);
+            
+            // 如果当前已连接，则重新连接以应用新配置
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addLogEntry("重新连接以应用新配置...");
+                disconnectWebSocket();
+                setTimeout(connectWebSocket, 1000);
+            }
+        }
+
+        // 初始化
+        function init() {
+            // 加载表单默认值
+            document.getElementById('threshold').value = config.priceAlerts.thresholdPercentage;
+            document.getElementById('alertInterval').value = config.priceAlerts.alertInterval;
+            document.getElementById('disableDeduplication').checked = config.priceAlerts.disableDeduplication;
+            document.getElementById('showPriceTable').checked = config.display.showPriceTable;
+            document.getElementById('refreshInterval').value = config.display.refreshInterval;
+            
+            // 请求浏览器通知权限
+            if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+            
+            // 绑定事件
+            connectBtn.addEventListener('click', connectWebSocket);
+            disconnectBtn.addEventListener('click', disconnectWebSocket);
+            applyConfigBtn.addEventListener('click', applyConfig);
+            
+            // 初始化界面
+            displayPrices();
+            addLogEntry("系统初始化完成，请配置API密钥并连接");
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+
+        // 处理页面关闭
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html> 
